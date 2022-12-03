@@ -8,6 +8,7 @@ library(tidyverse)
 library(p8105.datasets)
 library(viridis)
 library(dbplyr)
+library(modelr)
 
 theme_set(theme_minimal() + theme(legend.position = "bottom"))
 ```
@@ -89,12 +90,13 @@ The `homicide_df` is data contains homicides in 50 large U.S. It has `r nrow(hom
 
 #### Generate new variables
 
-Create a city_state variable, and a binary variable indicating whether the homicide is solved. Also omit cities Dallas, TX; Phoenix, AZ; and Kansas City, MO (these don’t report victim race), and Tulsa, AL (a data entry mistake). Limit analysis those for whom victim_race is white or black. Be sure that victim_age is numeric. Cannot convert victim_age to numeric variable since there is unknown age, so drop the unknown, then use `as.numeric` to convert it.
-* victim_sex: male, female, unknown
+Create a city_state variable, and a binary variable indicating whether the homicide is solved. Also omit cities Dallas, TX; Phoenix, AZ; and Kansas City, MO (these don’t report victim race), and Tulsa, AL (a data entry mistake). Limit analysis those for whom victim_race is white or black. Be sure that victim_age is numeric. Cannot convert victim_age to numeric variable since there is unknown age, so drop the unknown, then use `as.numeric` to convert it. Drop the unknow sex as well.
+* victim_sex: male, female
 * resolved: homicide case status whether it is solved
 ```{r}
 homicide_df_new <- homicide_df %>%
   filter(!victim_age == "Unknown", 
+         !victim_sex == "Unknown",
          victim_race == "White" | victim_race == "Black") %>%
   mutate(victim_age = as.numeric(victim_age),
          city_state = str_c(city, state, sep = ", "),
@@ -102,7 +104,7 @@ homicide_df_new <- homicide_df %>%
   filter(!city_state == "Dallas, TX", !city_state == "Phoenix, Ax", 
          !city_state == "Kansas City, MO", !city_state == "Tulsa, AL") %>%
   mutate(victim_race = as.factor(victim_race),
-         victim_sex = factor(victim_sex, level = c("Male", "Female", "Unknown")))
+         victim_sex = factor(victim_sex, level = c("Female", "Male")))
 
 head(homicide_df_new)
 summary(homicide_df_new)
@@ -123,6 +125,26 @@ baltimore_glm <- homicide_df_new %>%
 
 save(baltimore_glm, file = "baltimore_glm.RData")
 ```
+
+#### Estimates and Confidence interval
+
+Use `broom::tidy` to find the confidence interval of adjusted odds ratio for solving homicides comparing male victim and female victim.
+
+```{r}
+baltimore_glm  %>% 
+  broom::tidy() %>% 
+  mutate(lower_CI = confint(baltimore_glm)[,1],
+         upper_CI = confint(baltimore_glm)[,2]) %>% 
+  filter(term == 'victim_sexMale') %>% 
+  select(estimate, lower_CI, upper_CI) %>% 
+  mutate(estimate = exp(estimate),
+         lower_CI = exp(lower_CI),
+         upper_CI = exp(upper_CI))
+```
+
+The odds ratio of solving homicides for male is 0.425 higher comparing to female when all other variables fixed. Male is less likely to solve homicides comparing to female victim.
+
+
 
 
 
