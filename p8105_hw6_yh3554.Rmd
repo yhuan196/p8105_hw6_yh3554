@@ -144,7 +144,41 @@ baltimore_glm  %>%
 
 The odds ratio of solving homicides for male is 0.425 higher comparing to female when all other variables fixed. Male is less likely to solve homicides comparing to female victim.
 
+#### Losgistic regression for each cities
 
+```{r}
+homicide_city_df <- homicide_df_new %>%
+  select(resolved, victim_age, victim_race, victim_sex, city_state) %>%
+  nest(data = -city_state) %>%
+  mutate(
+    glms = map(data, ~glm(resolved ~ victim_age + victim_sex + victim_race,  data = ., family = binomial(link = "logit"))),
+    results = map(glms, broom::tidy)) %>%
+  select(-data, -glms) %>%
+  unnest(results) %>% 
+  filter(term == "victim_sexMale") %>% 
+  mutate(OR = exp(estimate),
+         low_CI = estimate - std.error * qnorm(0.975),
+         upper_CI = estimate + std.error * qnorm(0.975),
+         OR_low_CI = exp(low_CI),
+         OR_upper_CI = exp(upper_CI),
+         ) %>% 
+  select(city_state, OR, OR_low_CI, OR_upper_CI) 
+head(homicide_city_df)
+```
 
+#### Plot of estimated ORs and CIs for each city
 
+```{r}
+homicide_plot <- homicide_city_df %>%
+  ggplot(aes(x = fct_reorder(city_state, OR), y = OR)) +
+  geom_point() +
+  geom_errorbar(aes(ymin = OR_low_CI, ymax = OR_upper_CI)) +
+  labs(title = "Estimated Adjusted ORs and CIs for Male solving homocide comparing to female by city",
+       x = "City",
+       y = "Adjusted OR and 95% CI") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
 
+homicide_plot
+```
+
+Based on the plot, the average estimated OR of solving homicide for most cities is less than 1, for these cities, their male victim of homicides is less likely to be resolved comparing to female. On the other hand, there are few cities has estimated OR higher than 1, they are Fresno, Stockton, and Albuquerque, however, their confidence interval are a bit wider than all other cities, so no strong evidence to say that the resovling homidecide between male and female are different.
