@@ -86,3 +86,27 @@ homicide_df %>%
 #### Describle the raw data
 
 The `homicide_df` is data contains homicides in 50 large U.S. It has `r nrow(homicide_df)` variables and `r ncol(homicide_df)` cases. The key variables are unique id, victim demographic information (first name, last name, age, sex), the location (city, state, latitude, longitude), and disposition. It has `r sum(is.na (homicide_df$lat))` missing latitude information and `r sum(is.na (homicide_df$lon))` missing longitude information.
+
+#### Generate new variables
+
+Create a city_state variable, and a binary variable indicating whether the homicide is solved. Also omit cities Dallas, TX; Phoenix, AZ; and Kansas City, MO (these don’t report victim race), and Tulsa, AL (a data entry mistake). Limit analysis those for whom victim_race is white or black. Be sure that victim_age is numeric. Cannot convert victim_age to numeric variable since there is unknown age, so drop the unknown, then use `as.numeric` to convert it.
+* victim_sex: male, female
+* status: homicide case status whether it is solved
+```{r}
+homicide_df_new <- homicide_df %>%
+  filter(!victim_age == "Unknown", 
+         victim_race == "White" | victim_race == "Black") %>%
+  mutate(victim_age = as.numeric(victim_age),
+         city_state = str_c(city, state, sep = ", "),
+         status = ifelse(disposition == "Closed without arrest", "unsolved", "solved"),
+         ) %>%
+  filter(!city_state == "Dallas, TX", !city_state == "Phoenix, Ax", 
+         !city_state == "Kansas City, MO", !city_state == "Tulsa, AL") %>%
+  mutate(victim_race = as.factor(victim_race),
+         victim_sex = factor(victim_sex, level = c("Male", "Female", "Unknown")),
+         status = factor(status, level = c("solved", "unsolved")))
+
+head(homicide_df_new)
+summary(homicide_df_new)
+```
+
