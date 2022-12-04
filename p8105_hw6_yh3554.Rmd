@@ -182,3 +182,108 @@ homicide_plot
 ```
 
 Based on the plot, the average estimated OR of solving homicide for most cities is less than 1, for these cities, their male victim of homicides is less likely to be resolved comparing to female. On the other hand, there are few cities has estimated OR higher than 1, they are Fresno, Stockton, and Albuquerque, however, their confidence interval are a bit wider than all other cities, so no strong evidence to say that the resovling homidecide between male and female are different.
+
+
+## Problem 3
+
+#### Load and clean the data
+
+```{r}
+birthweight <- read_csv("birthweight.csv", show_col_types = FALSE)
+summary(birthweight)
+birthweight %>% 
+  summarise_at(vars(babysex:wtgain), .funs = function(x) mean(is.na(x))) %>%
+  knitr::kable()
+```
+
+Birthweight dataset has `r ncol(birthweight)` observations and `r nrow(birthweight)` variables. No missing value in this data.\
+\
+* babysex: baby’s sex (male = 1, female = 2)
+* bhead: baby’s head circumference at birth (centimeters)
+* blength: baby’s length at birth (centimeteres)
+* bwt: baby’s birth weight (grams)
+* delwt: mother’s weight at delivery (pounds)
+* fincome: family monthly income (in hundreds, rounded)
+* frace: father’s race (1 = White, 2 = Black, 3 = Asian, 4 = Puerto Rican, 8 = Other, 9 = Unknown)
+* gaweeks: gestational age in weeks
+* malform: presence of malformations that could affect weight (0 = absent, 1 = present)
+* menarche: mother’s age at menarche (years)
+* mheigth: mother’s height (inches)
+* momage: mother’s age at delivery (years)
+* mrace: mother’s race (1 = White, 2 = Black, 3 = Asian, 4 = Puerto Rican, 8 = Other)
+* parity: number of live births prior to this pregnancy
+* pnumlbw: previous number of low birth weight babies
+* pnumgsa: number of prior small for gestational age babies
+* ppbmi: mother’s pre-pregnancy BMI
+* ppwt: mother’s pre-pregnancy weight (pounds)
+* smoken: average number of cigarettes smoked per day during pregnancy
+* wtgain: mother’s weight gain during pregnancy (pounds)
+\
+```{r}
+birthweight_tidy <- birthweight %>%
+  mutate(
+    malform = as.logical(malform),
+    frace = recode(frace, `1` = "White", `2` = "Black", `3` = "Asian", `4` = "Puerto Rican", `8` = "Other", `9` = "Unknown"),
+    mrace = recode(mrace, `1` = "White", `2` = "Black", `3` = "Asian", `4` = "Puerto Rican", `8` = "Other"),
+    babysex = recode(babysex, `1` = "Male", `2` = "Female")
+    ) %>% 
+    filter(frace != "Unknown") %>%
+  mutate(
+    frace = fct_relevel(frace, "White"),
+    mrace = fct_relevel(mrace, "White"),
+    babysex = fct_relevel(babysex,"Female"))
+
+head(birthweight_tidy)
+```
+
+#### Regression model for birthweight
+
+```{r}
+birthweight_full <- lm(bwt~., data = birthweight_tidy)
+
+library(Rcmdr)
+#Forward selection on AIC
+s1 <- stepwise(birthweight_full, direction = "forward", criterion = "AIC")
+# Step:  AIC=48706.22
+# bwt ~ bhead + blength + mrace + delwt + gaweeks + smoken + ppbmi + 
+#     babysex + parity + ppwt + fincome
+
+#Backward selection on AIC
+s2 <- stepwise(birthweight_full, direction = "backward", criterion = "AIC")
+# Step:  AIC=48705.38
+# bwt ~ babysex + bhead + blength + delwt + fincome + gaweeks + 
+#     mheight + mrace + parity + ppwt + smoken
+```
+
+I tried forward and backward selection using AIC to best model, the results are slightly different, but both are better than full model. I will use model obtained from backward as final model which contains babysex, bhead, blength, delwt, fincome, and gaweeks.
+
+```{r}
+birthweight_final <- lm(bwt~ babysex + bhead + blength + delwt + fincome + gaweeks + 
+                          mheight + mrace + parity + ppwt + smoken, data = birthweight_tidy)
+summary(birthweight_final)
+```
+
+
+#### Plot of residuals vs fitted values
+
+```{r}
+res <- residuals(birthweight_final)
+fit <- fitted(birthweight_final)
+birthweight_tidy %>% 
+  add_predictions(birthweight_final) %>%
+  add_residuals(birthweight_final) %>%
+  ggplot(aes(x = pred, y = resid)) +
+  geom_point() + 
+  geom_hline(yintercept = 0,
+             linetype = "dashed", 
+             col = "red") +
+  labs(xlab = "Fitted",
+     ylab = "Residuals",
+     title = "Residual plot",
+     lwd = 2)
+```
+
+
+
+
+
