@@ -9,6 +9,7 @@ library(p8105.datasets)
 library(viridis)
 library(dbplyr)
 library(modelr)
+library(mgcv)
 
 theme_set(theme_minimal() + theme(legend.position = "bottom"))
 ```
@@ -267,8 +268,6 @@ summary(birthweight_final)
 #### Plot of residuals vs fitted values
 
 ```{r}
-res <- residuals(birthweight_final)
-fit <- fitted(birthweight_final)
 birthweight_tidy %>% 
   add_predictions(birthweight_final) %>%
   add_residuals(birthweight_final) %>%
@@ -277,13 +276,75 @@ birthweight_tidy %>%
   geom_hline(yintercept = 0,
              linetype = "dashed", 
              col = "red") +
-  labs(xlab = "Fitted",
-     ylab = "Residuals",
-     title = "Residual plot",
-     lwd = 2)
+  labs(title = "Residual plot", lwd = 2) + xlab("Fitted") + ylab("Residuals")
+```
+The plot seems to be clustered in one place with high variance and some outliers. The residuals are more or less distributed around 0, but it has large variance. Since our outcome is the birth weight of babys in gram, the fitted values are in gram as well, thus it will result in large variance. As long as the residuals do not have equal variances, nothing suspicious. Some points are further away from the cluster center, a standardized residual plot against fitted values will provide a better way to detect outliers. 
+
+## Square root of residuals vs fitted value
+```{r}
+birthweight_tidy %>% 
+  add_predictions(birthweight_final) %>%
+  add_residuals(birthweight_final) %>%
+  mutate(pred = pred, sqrt_resid = sqrt(resid)) %>%
+  ggplot(aes(x = pred, y = sqrt_resid)) +
+  geom_point() + 
+  geom_hline(yintercept = 0,
+             linetype = "dashed", 
+             col = "red") +
+  labs(title = "Square Root Residual vs Fitted", lwd = 2) + xlab("Fitted") + ylab("Square Root of Residuals")
 ```
 
+Again, same conclusion as previous plot.
 
+#### Compare the final model with main effect model and model with interactions
 
+```{r}
+# main effect model
+bt_main_effects <- 
+  birthweight_tidy %>% 
+  lm(data = ., bwt ~ blength + gaweeks) 
+summary(bt_main_effects)
 
+#interactive model
+bt_interactive <-
+  birthweight_tidy %>% 
+  lm(data = ., bwt ~ bhead*blength*babysex)
+summary(bt_interactive)
+
+# Cross Validation
+cv_df =
+  crossv_mc(birthweight_tidy, 100) %>% 
+  mutate(
+    train = map(train, as_tibble),
+    test = map(test, as_tibble))
+
+cv_df = 
+  cv_df %>% 
+  mutate(
+    birthweight_final  = map(train, ~lm( bwt ~ babysex + bhead + blength + delwt + fincome + gaweeks + mheight + mrace + parity + ppwt + smoken, data = .x)),
+    bt_main_effects  = map(train, ~lm(bwt ~ gaweeks + blength, data = .x)),
+    bt_interactive  = map(train, ~lm(bwt ~ bhead*blength*babysex, data = .x))) %>% 
+  mutate(
+    rmse_final = map2_dbl(birthweight_final, test, ~rmse(model = .x, data = .y)),
+    rmse_main_effects    = map2_dbl(bt_main_effects, test, ~rmse(model = .x, data = .y)),
+    rmse_interactive = map2_dbl(bt_interactive, test, ~rmse(model = .x, data = .y)))
+
+cv_df %>% 
+  summarize(
+    rmse_final_mean = mean(rmse_final),
+    rmse_main_effects_mean = mean(rmse_main_effects),
+    rmse_interactive_meam = mean(rmse_interactive))
+
+cv_df %>% 
+  select(starts_with("rmse")) %>% 
+  pivot_longer(
+    everything(),
+    names_to = "model", 
+    values_to = "rmse",
+    names_prefix = "rmse_") %>% 
+  mutate(model = fct_inorder(model)) %>% 
+  ggplot(aes(x = model, y = rmse)) + geom_violin()
+```
+
+Our final model has the smallest RMSE values compare to the other two model. So the best model is the model that I generated.
 
